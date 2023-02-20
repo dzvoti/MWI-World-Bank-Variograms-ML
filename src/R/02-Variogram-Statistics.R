@@ -1,5 +1,20 @@
-# Read in the results from the variogram calculations from the csv file in data\variogram_outputs\mwi_sample_points_variogram.csv
-results <- read_csv(file.path(wd, "/data/variogram_outputs/mwi_sample_points_variogram.csv"))
+# Load the required packages tidyverse and here
+library(tidyverse)
+library(here)
+library(DT)
+
+# Set the working directory
+wd <- here::here()
+
+# Read in the results from the variogram calculations
+results_import <- read_csv(file.path(wd, "/data/variogram_outputs/mwi_sample_points_variogram.csv"))
+
+#Clean results. Treat (p1_id,p2_id) == (p2_id,p1_id) as a duplicate row.
+results <- results_import |> 
+mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |> 
+distinct(row_id_1, row_id_2,.keep_all = TRUE)|> 
+arrange(row_id_1,row_id_2) 
+
 
 ## Overall summary statistics
 national_summary <- results |>
@@ -39,7 +54,7 @@ EA_summary <- results |>
         ph_vario_sd = sd(ph_variogram),
         log_SOC_variogram_mean = mean(log_SOC_variogram),
         log_SOC_vario_sd = sd(log_SOC_variogram)
-    )
+    ) 
 
 
 
@@ -146,3 +161,14 @@ EA_summary <- results |>
 #     xlab("Distance (km)") +
 #     ylab("Semivariance") +
 #     theme_bw()
+
+
+
+df  <- tibble(p1_id = c("A","B","C","D","E","D","C","B","A"),p2_id = c("B","C","D","E","A","B","C","D","E"))
+
+df <- df  %>% mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |> distinct(row_id_1, row_id_2,.keep_all = TRUE)
+
+results |> mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |> 
+# distinct(row_id_1, row_id_2,.keep_all = TRUE)|> 
+arrange(row_id_1,row_id_2) |>
+head(10)

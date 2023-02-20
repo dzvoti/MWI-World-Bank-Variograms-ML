@@ -8,6 +8,7 @@ format:
     toc-location: left
     embed-resources: true
     smooth-scroll: true
+    page-layout: full
     theme:
       light: flatly
       dark: darkly
@@ -20,14 +21,16 @@ This report summaries the results of the variogram calculations for Soil pH  and
  |File | Description |
  |-----|-------------|
  |scripts| |
- | `src\qgis-python\01-mwi-sample-points-creator.py` | Python script to create sample points in QGIS.   |
- | `src\R\01-mwi-variogram-parallel.R`| R script to calculate the variograms|
+ | [01-mwi-sample-points-creator.py](src\qgis-python\01-mwi-sample-points-creator.py) | Python script to create sample points in QGIS.   |
+ | [01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R)| R script to calculate the variograms|
  |Inputs|  |
- |`data\admin_inputs\mwi_eas_acho\echo2_prioritization\ECHO2_prioritization.shp` | Shapefile of enumeration areas in Malawi|
- | `data\admin_inputs\mwi_eas_acho\lake_malawi.shp` | Shapefile of Lake Malawi|
+ |[ECHO2_prioritization.shp](data\admin_inputs\mwi_eas_acho\echo2_prioritization\ECHO2_prioritization.shp) | Shapefile of enumeration areas in Malawi|
+ | [lake_malawi.shp](data\admin_inputs\mwi_eas_acho\lake_malawi.shp) | Shapefile of Lake Malawi|
  |Outputs|
- |`data\variogram_outputs\mwi_sample_points_variogram.csv` | CSV file with the results of the variogram calculations|
- | `data\point_outputs\mwi_sample_points.shp` | Shapefile of the sample points generated in QGIS|
+ |[mwi_sample_points_variogram.csv](data\variogram_outputs\mwi_sample_points_variogram.csv) | CSV file with the results of the variogram calculations|
+ | [data\point_outputs\mwi_sample_points.shp](data\point_outputs\mwi_sample_points.shp) | Shapefile of the sample points generated in QGIS|
+
+ : Directory Structure {tbl-colwidths="[25,75]"}
 
 # Processing steps
 ## Set working directory and load required libraries
@@ -35,21 +38,26 @@ This report summaries the results of the variogram calculations for Soil pH  and
 # set working directory to the root of the project
 wd <- here::here()
 # load required libraries
-library(geosphere) # For distance calculations
-library(sf) # For spatial data
-library(here) # For dynamic file paths
-library(tidyverse) # For data wrangling
-library(knitr) # For table formatting
+library(geosphere)  # For distance calculations
+library(sf)         # For spatial data
+library(here)       # For dynamic file paths
+library(tidyverse)  # For data wrangling
+library(knitr)      # For table formatting
 library(kableExtra) # For table formatting
-library(leaflet) # For interactive maps
+library(leaflet)    # For interactive maps
+library(DT)         # For interactive tables
 ```
 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE,eval=TRUE}
+source(file.path(wd, "src/R/02-Variogram-Statistics.R"))
+```
 
 ## Sample point generation
 
 I used the QGIS Python console to generate a random sample of points within the administrative regions of Malawi. R was slow for point generation but python is faster. I have an alternative R script that also generate the points. The script is available in the scripts directory of the project [here](src\qgis-python\01-mwi-sample-points-creator.py). The script is also available below.
 
-```{python echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,python.reticulate = FALSE}
+```{python echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,python.reticulate = FALSE,collapse=TRUE}
 # This script creates a random sample of points within the administrative regions of Malawi. It should be run in QGIS with the Python Console open.
 
 # Import modules
@@ -173,31 +181,29 @@ iface.addVectorLayer(output_file, "mwi_sample_points", "ogr")
 ```{r echo=FALSE, message=FALSE, warning=FALSE,eval=TRUE}
 # Read in the sample points shapefile and the polygon shapefile with sf and plot them using leaflet
 
-malawi <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/echo2_prioritization/ECHO2_prioritization.shp"))
+malawi <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/echo2_prioritization/ECHO2_prioritization.shp"), quiet = TRUE)
 
-lake_Malawi <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/lake_malawi.shp"))
+lake_Malawi <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/lake_malawi.shp"),quiet=TRUE)
 
-sample_points <- st_read(file.path(wd, "/data/point_outputs/mwi_sample_points.shp"))
+sample_points_shp <- st_read(file.path(wd, "/data/point_outputs/mwi_sample_points.shp"), quiet = TRUE)
 ```
 
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE,collapse=TRUE,eval=TRUE}
 
-# Plot the sample points and the polygon shapefile
+# Plot the sample points and the polygon shapefile. Add a legend to the map
 leaflet() %>%
     addProviderTiles(providers$CartoDB.Positron) %>%
     addPolygons(data = malawi, color = "black", weight = 1, fillOpacity = 0) %>%
     addPolygons(data = lake_Malawi, color = "blue", weight = 1, fillOpacity = 0) %>%
-    addCircleMarkers(data = sample_points, radius = 1, color = "red", fillOpacity = 0.5)
+    addCircleMarkers(data = sample_points_shp, radius = 0.5, color = "black", fillOpacity = 0.5)
 ```
 
 
 ### Sample points table
 This is what the sample points look like.
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-sample_points %>%
-    head() %>%
-    kable() %>%
-    kable_styling()
+```{r echo=TRUE, message=FALSE, warning=FALSE,collapse=TRUE,eval=TRUE}
+sample_points_shp %>%
+    datatable(options = list(autoWidth = TRUE))
 ```
 
 
@@ -206,7 +212,7 @@ sample_points %>%
 I modified the variogam function from your script to calculate the variogram for each pair of points in the sample points shapefile. The function is in the file [src\R\01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R). below is the code to run the function.
 
 
-```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,collapse=TRUE}
 library(foreach) # for parallel processing
 library(doParallel) # for parallel processing
 library(geosphere) # for calculating distances
@@ -336,12 +342,9 @@ write_csv(results, file.path(wd, "data/variogram_outputs/mwi_sample_points_vario
 I kept the Enumeration areas, District and Point ID columns from the original point shapefile. This is to enable us to group the pairwise points by EA and District. i.e. when p1_District == p2_District, then the pairwise points are in the same district. The [src\R\01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R) performs the summaries.
 
 
-```{r echo=FALSE, message=FALSE, warning=FALSE,eval=TRUE}
-source(file.path(wd, "src/R/02-Variogram-Statistics.R"))
-```
 ### Variogram calculations
 
-```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,collapse=TRUE}
 # Read in the results from the variogram calculations from the csv file in data\variogram_outputs\mwi_sample_points_variogram.csv
 results <- read_csv(file.path(wd, "/data/variogram_outputs/mwi_sample_points_variogram.csv"))
 
@@ -387,31 +390,31 @@ EA_summary <- results |>
 
 
 ### National Summary Statistics
-```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE}
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
 national_summary |>
-    kable() |>
-    kable_styling()
+    datatable(options = list(autoWidth = TRUE))
 
 ```
 
 
 ## District Summary Statistics
-```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE}
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
 district_summary |>
-    kable() |>
-    kable_styling()
+    datatable(options = list(autoWidth = TRUE))
 
 ```
 
 ## Enumeration Area Summary Statistics
-```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE}
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
 EA_summary |>
-    kable() |>
-    kable_styling()
+    datatable(options = list(autoWidth = TRUE))
 
 ```
 
 # Variogram Plots
+
+
+
 
 
 
