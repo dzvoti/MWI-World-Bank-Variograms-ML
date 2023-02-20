@@ -1,0 +1,418 @@
+---
+title: "Soil pH and Soil Organic Carbon Variogram Calculations for Malawi"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: Contents
+    toc-location: left
+    embed-resources: true
+    smooth-scroll: true
+    theme:
+      light: flatly
+      dark: darkly
+---
+
+# Introduction
+This report summaries the results of the variogram calculations for Soil pH  and soil organic carbon in Malawi.
+
+## Directory structure
+ |File | Description |
+ |-----|-------------|
+ |scripts| |
+ | `src\qgis-python\01-mwi-sample-points-creator.py` | Python script to create sample points in QGIS.   |
+ | `src\R\01-mwi-variogram-parallel.R`| R script to calculate the variograms|
+ |Inputs|  |
+ |`data\admin_inputs\mwi_eas_acho\echo2_prioritization\ECHO2_prioritization.shp` | Shapefile of enumeration areas in Malawi|
+ | `data\admin_inputs\mwi_eas_acho\lake_malawi.shp` | Shapefile of Lake Malawi|
+ |Outputs|
+ |`data\variogram_outputs\mwi_sample_points_variogram.csv` | CSV file with the results of the variogram calculations|
+ | `data\point_outputs\mwi_sample_points.shp` | Shapefile of the sample points generated in QGIS|
+
+# Processing steps
+## Set working directory and load required libraries
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# set working directory to the root of the project
+wd <- here::here()
+# load required libraries
+library(geosphere) # For distance calculations
+library(sf) # For spatial data
+library(here) # For dynamic file paths
+library(tidyverse) # For data wrangling
+library(knitr) # For table formatting
+library(kableExtra) # For table formatting
+library(leaflet) # For interactive maps
+```
+
+
+## Sample point generation
+
+I used the QGIS Python console to generate a random sample of points within the administrative regions of Malawi. R was slow for point generation but python is faster. I have an alternative R script that also generate the points. The script is available in the scripts directory of the project [here](src\qgis-python\01-mwi-sample-points-creator.py). The script is also available below.
+
+```{python echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,python.reticulate = FALSE}
+# This script creates a random sample of points within the administrative regions of Malawi. It should be run in QGIS with the Python Console open.
+
+# Import modules
+import processing
+import random
+
+
+# Set working directory
+wd = r'C:\Users\sbzlm3\OneDrive - The University of Nottingham\Documents\MWI-World-Bank-Variograms-ML'
+
+# Set the output file as a shapefile. The output file will be saved in the data/point_outputs folder
+output_file = wd + r'\data\point_outputs\mwi_sample_points.shp'
+
+
+# Check if the output file exists and delete it if it does
+if os.path.exists(output_file):
+    # check if the output file is loaded in QGIS session and remove it if it is
+    # if iface.activeLayer().source() == output_file:
+    #     iface.activeLayer().removeAllFeatures()   
+    os.remove(output_file)  # Delete the file
+
+
+# Set input polygon file
+polygon_file = wd + r'\data\admin_inputs\mwi_eas_acho\echo2_prioritization\ECHO2_prioritization.shp'
+
+# Check if the polygon file exists if not exit the script with an error message
+if not os.path.exists(polygon_file):
+    print('The input polygon file does not exist')
+    
+
+# Set waterbodies or other area to mask file
+waterbodies_file = wd + r'\data\admin_inputs\mwi_eas_acho\lake_malawi.shp'
+
+# Check if the waterbodies file exists if not exit the script with an error message
+if not os.path.exists(waterbodies_file):
+    print('The input waterbodies file does not exist')
+    
+
+# Set number of points to generate
+N = 10000
+
+# Load the polygon layer
+polygon_layer = QgsVectorLayer(polygon_file, "polygon", "ogr")
+
+# Load the waterbodies layer
+waterbodies_layer = QgsVectorLayer(waterbodies_file, "waterbodies", "ogr")
+
+# Dissolve the administrative regions to get the outer boundary
+bound_layer = processing.run("native:dissolve", {'INPUT': polygon_layer,
+                                                 'FIELD': [],
+                                                 'SEPARATE_DISJOINT': False,
+                                                 'OUTPUT': 'memory:'})['OUTPUT']
+
+
+# Mask the waterbodies from the dissolved polygon
+diff_params = {
+    'INPUT': bound_layer,
+    'OVERLAY': waterbodies_layer,
+    'OUTPUT': 'TEMPORARY_OUTPUT',
+    'GRID_SIZE': None
+}
+
+masked_bound_layer = processing.run(
+    "native:difference", diff_params)['OUTPUT']
+
+# Generate random points within the bounds of the administrative regions masking waterbodies
+# random.seed(123)
+random_points_layer = processing.run("qgis:randompointsinsidepolygons", {
+    'INPUT': masked_bound_layer,
+    'STRATEGY': 0,
+    'VALUE': N,
+    'MIN_DISTANCE': None,
+    'OUTPUT': 'memory:'})['OUTPUT']
+
+
+# Join the polygon attributes with the random points
+join_params = {
+    'DISCARD_NONMATCHING': False,
+    'FIELD': [],
+    'INPUT': random_points_layer,
+    'JOIN': polygon_layer,
+    'JOIN_FIELDS': [],
+    'METHOD': 0,
+    'OUTPUT': 'memory:'
+}
+
+result_layer = processing.run("native:joinattributesbylocation", {'INPUT': random_points_layer,
+                                                                  'PREDICATE': [
+                                                                      0],
+                                                                  'JOIN': polygon_layer,
+                                                                  'JOIN_FIELDS': [],
+                                                                  'METHOD': 0,
+                                                                  'DISCARD_NONMATCHING': False,
+                                                                  'PREFIX': '',
+                                                                  'OUTPUT': 'memory:'})['OUTPUT']
+
+# Add the geometry attributes table
+result_layer_wa = processing.run("qgis:exportaddgeometrycolumns", {
+    'INPUT': result_layer,
+    'CALC_METHOD': 0,
+    'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
+
+#
+
+# Save the result layer
+QgsVectorFileWriter.writeAsVectorFormat(
+    result_layer_wa, output_file, "UTF-8", result_layer.crs(), "ESRI Shapefile")
+
+# Print script completion message and the output file path
+print('Script completed. Output file saved to:' + wd + output_file)
+
+
+# Load the output layer to QGIS
+iface.addVectorLayer(output_file, "mwi_sample_points", "ogr")
+
+```
+
+## Exploring the sample points
+
+### Sample points map
+```{r echo=FALSE, message=FALSE, warning=FALSE,eval=TRUE}
+# Read in the sample points shapefile and the polygon shapefile with sf and plot them using leaflet
+
+malawi <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/echo2_prioritization/ECHO2_prioritization.shp"))
+
+lake_Malawi <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/lake_malawi.shp"))
+
+sample_points <- st_read(file.path(wd, "/data/point_outputs/mwi_sample_points.shp"))
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+# Plot the sample points and the polygon shapefile
+leaflet() %>%
+    addProviderTiles(providers$CartoDB.Positron) %>%
+    addPolygons(data = malawi, color = "black", weight = 1, fillOpacity = 0) %>%
+    addPolygons(data = lake_Malawi, color = "blue", weight = 1, fillOpacity = 0) %>%
+    addCircleMarkers(data = sample_points, radius = 1, color = "red", fillOpacity = 0.5)
+```
+
+
+### Sample points table
+This is what the sample points look like.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+sample_points %>%
+    head() %>%
+    kable() %>%
+    kable_styling()
+```
+
+
+## Variogram calculations
+
+I modified the variogam function from your script to calculate the variogram for each pair of points in the sample points shapefile. The function is in the file [src\R\01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R). below is the code to run the function.
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+library(foreach) # for parallel processing
+library(doParallel) # for parallel processing
+library(geosphere) # for calculating distances
+library(sf) # for reading in and writting shapefiles
+library(here) # for working directory management
+library(tidyverse) # for data wrangling
+
+# set working directory to the root of the project. Everything else is relative to this.
+wd <- here()
+
+# read in the sample points shapefile.
+sample_points <- st_read(file.path(wd, "data/point_outputs/mwi_sample_points.shp"))
+
+# subset the sample points to the first 100 points for testing
+sample_points <- sample_points |>
+    st_drop_geometry() |> # drop the geometry column
+    as_tibble() |> # convert to a tibble for easier manipulation
+    head(10)
+
+# set pH and log SOC variogram parameters
+pH_cn <- 0.198 # nugget variance (uncorrelated)
+pH_c1 <- 0.253 # correlated variance
+pH_phi <- 36.81 # distance parameter (km)
+pH_kappa <- 0.5 # smoothness parameter
+
+log_SOC_cn <- 0.204 # nugget variance (uncorrelated)
+log_SOC_c1 <- 0.075 # correlated variance
+log_SOC_phi <- 43.34 # distance parameter (km)
+log_SOC_kappa <- 0.5 # smoothness parameter
+
+# define the Matérn variogram function
+matern <- function(u, phi, kappa) {
+    # set names to NULL to avoid issues with empty vectors
+    if (is.vector(u)) {
+        names(u) <- NULL
+    }
+    # set dimnames to NULL to avoid issues with empty matrices
+    if (is.matrix(u)) {
+        dimnames(u) <- list(NULL, NULL)
+    }
+    # calculate the Matérn correlation
+    uphi <- u / phi
+    uphi <- ifelse(u > 0, (((2^(-(kappa - 1))) / ifelse(0, Inf,
+        gamma(kappa)
+    )) * (uphi^kappa) * besselK(x = uphi, nu = kappa)),
+    1
+    )
+    uphi[u > 600 * phi] <- 0
+    return(uphi)
+}
+
+# define the Matérn variogram function
+vgm.mat <- function(h, phi, kappa, cn, c1) {
+    # calculate the variogram for lag h
+    rho <- matern(h, phi, kappa)
+    return(cn + c1 * (1 - rho)^2)
+}
+
+# initialize a dataframe to store the results of the pairwise computations. I keep the EA code and district name for each location to make it easier to identify the locations in the results.
+results <- tibble(
+    p1_id = character(),
+    p1_EACODE = character(),
+    p1_District = character(),
+    p2_id = character(),
+    p2_EACODE = character(),
+    p2_District = character(),
+    h = numeric(),
+    ph_variogram = numeric(),
+    log_SOC_variogram = numeric()
+)
+
+# set up a cluster with n cores for parallel processing. I use n - 1 cores to leave one core free for other processes.
+cl <- makeCluster(7)
+
+# register the cluster for parallel processing
+registerDoParallel(cl)
+
+# loop through the sample points and calculate the pairwise variograms in parallel
+results <- foreach(i = 1:nrow(sample_points), .combine = rbind) %dopar% {
+    result_list <- list()
+    for (j in 1:nrow(sample_points)) {
+        # skip the computation if the two locations are the same
+        if (i == j) {
+            next
+        } else {
+            # calculate the distance between the two locations in km using the Vincenty ellipsoid method
+            loc1 <- c(sample_points$xcoord[i], sample_points$ycoord[i])
+            loc2 <- c(sample_points$xcoord[j], sample_points$ycoord[j])
+            h <- geosphere::distVincentySphere(loc1, loc2) / 1000 # distance converted to km
+
+            # Calculate the PH variogram for the two locations using the Matérn variogram function
+            ph_variogram <- vgm.mat(h, pH_phi, pH_kappa, pH_cn, pH_c1)
+            # Calculate the log SOC variogram for the two locations using the Matérn variogram function
+            log_SOC_variogram <- vgm.mat(h, log_SOC_phi, log_SOC_kappa, log_SOC_cn, log_SOC_c1)
+
+            # store the in a dataframe
+            result <- dplyr::tibble(
+                p1_id = sample_points$id[i],
+                p1_EACODE = sample_points$EACODE[i],
+                p1_District = sample_points$DISTRICT[i],
+                p2_id = sample_points$id[j],
+                p2_EACODE = sample_points$EACODE[j],
+                p2_District = sample_points$DISTRICT[j],
+                h = h,
+                ph_variogram = ph_variogram,
+                log_SOC_variogram = log_SOC_variogram
+            )
+            # append the result to the results dataframe
+            result_list[[j]] <- result
+        }
+    }
+    # print a message to the console to show progress
+    message(paste0("Finished ", i, " of ", nrow(sample_points), " locations"))
+    return(do.call(rbind, result_list))
+}
+
+# stop the cluster and deregister the parallel backend
+stopCluster(cl)
+
+# write the results to a csv file. Replace file if it already exists.
+write_csv(results, file.path(wd, "data/variogram_outputs/mwi_sample_points_variogram.csv"), overwrite = TRUE)
+
+```
+
+# Variogram visualisation
+## Variogram summaries
+I kept the Enumeration areas, District and Point ID columns from the original point shapefile. This is to enable us to group the pairwise points by EA and District. i.e. when p1_District == p2_District, then the pairwise points are in the same district. The [src\R\01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R) performs the summaries.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE,eval=TRUE}
+source(file.path(wd, "src/R/02-Variogram-Statistics.R"))
+```
+### Variogram calculations
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+# Read in the results from the variogram calculations from the csv file in data\variogram_outputs\mwi_sample_points_variogram.csv
+results <- read_csv(file.path(wd, "/data/variogram_outputs/mwi_sample_points_variogram.csv"))
+
+## Overall summary statistics
+national_summary <- results |>
+    summarize(
+        ph_n = n(),
+        ph_variogram_mean = mean(ph_variogram),
+        ph_vario_sd = sd(ph_variogram),
+        log_SOC_n = n(),
+        log_SOC_variogram_mean = mean(log_SOC_variogram),
+        log_SOC_vario_sd = sd(log_SOC_variogram)
+    )
+
+
+## District summary statistics
+district_summary <- results |>
+    filter(p1_District == p2_District) %>%
+    group_by(p1_District) %>%
+    summarize(
+        ph_n = n(),
+        ph_variogram_mean = mean(ph_variogram),
+        ph_vario_sd = sd(ph_variogram),
+        log_SOC_n = n(),
+        log_SOC_variogram_mean = mean(log_SOC_variogram),
+        log_SOC_vario_sd = sd(log_SOC_variogram)
+    )
+
+## EA summary statistics
+EA_summary <- results |>
+    filter(p1_EACODE == p2_EACODE) %>%
+    group_by(p1_EACODE) %>%
+    summarize(
+        ph_n = n(),
+        ph_variogram_mean = mean(ph_variogram),
+        ph_vario_sd = sd(ph_variogram),
+        log_SOC_n = n(),
+        log_SOC_variogram_mean = mean(log_SOC_variogram),
+        log_SOC_vario_sd = sd(log_SOC_variogram)
+    )
+
+```
+
+
+### National Summary Statistics
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE}
+national_summary |>
+    kable() |>
+    kable_styling()
+
+```
+
+
+## District Summary Statistics
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE}
+district_summary |>
+    kable() |>
+    kable_styling()
+
+```
+
+## Enumeration Area Summary Statistics
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE}
+EA_summary |>
+    kable() |>
+    kable_styling()
+
+```
+
+# Variogram Plots
+
+
+
+
