@@ -9,11 +9,10 @@ wd <- here::here()
 # Read in the results from the variogram calculations
 results_import <- read_csv(file.path(wd, "/data/variogram_outputs/mwi_sample_points_variogram.csv"))
 
-#Clean results. Treat (p1_id,p2_id) == (p2_id,p1_id) as a duplicate row.
-results <- results_import |> 
-mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |> 
-distinct(row_id_1, row_id_2,.keep_all = TRUE)|> 
-arrange(row_id_1,row_id_2) 
+# Clean results. Treat (p1_id,p2_id) == (p2_id,p1_id) as a duplicate row.
+results <- results_import |>
+    mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |>
+    distinct(row_id_1, row_id_2, .keep_all = TRUE)
 
 
 ## Overall summary statistics
@@ -54,121 +53,52 @@ EA_summary <- results |>
         ph_vario_sd = sd(ph_variogram),
         log_SOC_variogram_mean = mean(log_SOC_variogram),
         log_SOC_vario_sd = sd(log_SOC_variogram)
-    ) 
+    )
 
 
 
 
 
-# # Clean up the results data frame by removing rows with missing values
-# results_clean <- results %>% drop_na()
+# plot the pH variogram (National)
+pH_semivariogram <- results %>%
+    sample_frac(0.05) |> # sample 5% of the data for plot
+    ggplot(aes(x = h, y = ph_variogram)) +
+    # geom_point() +
+    geom_line() +
+    ggtitle("pH Variogram") +
+    xlab("Distance (km)") +
+    ylab("Semivariance") +
+    theme_bw()
 
-# # Compute summary statistics for the variogram
-# vario_summary <- tibble(District = character(), n = numeric(), vario_mean = numeric(), vario_sd = numeric())
+# plot the log SOC variogram (National)
+log_SOC_semivariogram <- results %>%
+    sample_frac(0.05) |> # sample 5% of the data for plot
+    ggplot(aes(x = h, y = log_SOC_variogram)) +
+    # geom_point() +
+    geom_line() +
+    ggtitle("log SOC Variogram") +
+    xlab("Distance (km)") +
+    ylab("Semivariance") +
+    theme_bw()
 
-# # Compute the summary statistics for the variogram for each district
-# for (distr in unique(results_clean$p1_District)) {
-#     # select the rows for the district
-#     distr_summary <- results_clean %>%
-#         filter(p1_District == distr & p2_District == distr) %>%
-#         # compute the summary statistics
-#         group_by(p1_District) %>%
-#         summarize(
-#             n = n(),
-#             vario_mean = mean(vario),
-#             vario_sd = sd(vario)
-#         ) |>
-#         # rename the District column from p1_District
-#         rename(District = p1_District)
-#     # append the summary statistics to the variogram summary dataframe
-#     vario_summary <- rbind(vario_summary, distr_summary)
-# }
+# plot the pH variogram per district
+pH_Dist_semivariogram <- results %>%
+    filter(p1_District == p2_District) %>%
+    ggplot(aes(x = h, y = ph_variogram)) +
+    geom_line() +
+    ggtitle("pH Variogram") +
+    xlab("Distance (km)") +
+    ylab("Semivariance") +
+    theme_bw() +
+    facet_wrap(~p1_District)
 
-
-# # Plot the variogram
-# for (distr in unique(results_clean$p1_District)) {
-#     # select the rows for the district
-#     results_clean %>%
-#         filter(p1_District == distr & p2_District == distr) %>%
-#         # plot the variogram
-#         ggplot(aes(x = h, y = vario)) +
-#         geom_point() +
-#         geom_line() +
-#         # geom_errorbar(aes(ymin = vario_mean - vario_sd, ymax = vario_mean + vario_sd), width = 0.1) +
-#         ggtitle("Experimental Variogram") +
-#         xlab("Distance (km)") +
-#         ylab("Semivariance") +
-#         theme_bw()
-# }
-
-
-# # Plot the h on the horizontal axis and the variogram on the vertical axis
-# results %>%
-#     ggplot(aes(x = h, y = vario)) +
-#     geom_point() +
-#     geom_line() +
-#     ggtitle("Experimental Variogram") +
-#     xlab("Distance (km)") +
-#     ylab("Semivariance") +
-#     theme_bw()
-
-# # filter points where p1_District == p2_Dristrict. Then Plot the h on the horizontal axis and the variogram on the vertical axis and group the points by district. Make a facet plots with a different plot for each district and also indicate the number of points in each plot.
-
-
-
-
-
-
-
-# # filter points where p1_District == p2_Dristrict. Then Plot the h on the horizontal axis and the variogram on the vertical axis and group the points by district. Make a facet plots with a different plot for each district and also indicate the number of points in each plot.
-
-
-
-
-
-
-# results %>%
-#     filter(p1_District == p2_District) %>%
-#     ggplot(aes(x = h, y = vario, color = p1_District)) +
-#     geom_point() +
-#     geom_line() +
-#     ggtitle("Experimental Variogram") +
-#     xlab("Distance (km)") +
-#     ylab("Semivariance") +
-#     theme_bw() +
-#     facet_wrap(~p1_District)
-
-
-
-
-# results %>%
-#     ggplot(aes(x = h, y = vario, color = p1_District)) +
-#     geom_point() +
-#     geom_line() +
-#     ggtitle("Experimental Variogram") +
-#     xlab("Distance (km)") +
-#     ylab("Semivariance") +
-#     theme_bw() +
-#     facet_wrap(~p1_District)
-
-
-
-# results %>%
-#     ggplot(aes(x = h, y = vario, color = p1_District)) +
-#     geom_point() +
-#     geom_line() +
-#     ggtitle("Experimental Variogram") +
-#     xlab("Distance (km)") +
-#     ylab("Semivariance") +
-#     theme_bw()
-
-
-
-df  <- tibble(p1_id = c("A","B","C","D","E","D","C","B","A"),p2_id = c("B","C","D","E","A","B","C","D","E"))
-
-df <- df  %>% mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |> distinct(row_id_1, row_id_2,.keep_all = TRUE)
-
-results |> mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |> 
-# distinct(row_id_1, row_id_2,.keep_all = TRUE)|> 
-arrange(row_id_1,row_id_2) |>
-head(10)
+# plot the log SOC variogram per district
+log_SOC_Dist_semivariogram <- results %>%
+    filter(p1_District == p2_District) %>%
+    ggplot(aes(x = h, y = log_SOC_variogram)) +
+    geom_line() +
+    ggtitle("log SOC Variogram") +
+    xlab("Distance (km)") +
+    ylab("Semivariance") +
+    theme_bw() +
+    facet_wrap(~p1_District)
