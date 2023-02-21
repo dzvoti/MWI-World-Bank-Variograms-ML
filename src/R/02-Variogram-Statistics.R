@@ -27,6 +27,7 @@ national_summary <- results |>
     )
 
 
+
 ## District summary statistics
 district_summary <- results |>
     filter(p1_District == p2_District) %>%
