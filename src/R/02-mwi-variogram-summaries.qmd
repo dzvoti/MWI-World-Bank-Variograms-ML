@@ -57,6 +57,8 @@ source(file.path(wd, "src/R/02-Variogram-Statistics.R"))
 
 I used the QGIS Python console to generate a random sample of points within the administrative regions of Malawi. R was slow for point generation but python is faster. I have an alternative R script that also generate the points. The script is available in the scripts directory of the project [here](src\qgis-python\01-mwi-sample-points-creator.py). The script is also available below.
 
+:::{.callout-note collapse="true"}
+## Sample points creation script
 ```{python echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,python.reticulate = FALSE,collapse=TRUE}
 # This script creates a random sample of points within the administrative regions of Malawi. It should be run in QGIS with the Python Console open.
 
@@ -175,6 +177,8 @@ iface.addVectorLayer(output_file, "mwi_sample_points", "ogr")
 
 ```
 
+:::
+
 ## Exploring the sample points
 
 ### Sample points map
@@ -202,7 +206,8 @@ leaflet() %>%
 ### Sample points table
 This is what the sample points look like.
 ```{r echo=TRUE, message=FALSE, warning=FALSE,collapse=TRUE,eval=TRUE}
-sample_points_shp %>%
+sample_points_shp |>
+    head(100) |>
     datatable(options = list(autoWidth = TRUE))
 ```
 
@@ -211,7 +216,9 @@ sample_points_shp %>%
 
 I modified the variogam function from your script to calculate the variogram for each pair of points in the sample points shapefile. The function is in the file [src\R\01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R). below is the code to run the function.
 
-
+:::{.callout-note collapse="true"}
+## Variogram calculations script
+```{r echo=TRUE, message=FALSE, warning=FALSE,collapse=TRUE,eval=FALSE}
 ```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,collapse=TRUE}
 library(foreach) # for parallel processing
 library(doParallel) # for parallel processing
@@ -227,10 +234,10 @@ wd <- here()
 sample_points <- st_read(file.path(wd, "data/point_outputs/mwi_sample_points.shp"))
 
 # subset the sample points to the first 100 points for testing
-sample_points <- sample_points |>
-    st_drop_geometry() |> # drop the geometry column
-    as_tibble() |> # convert to a tibble for easier manipulation
-    head(10)
+# sample_points <- sample_points |>
+#     st_drop_geometry() |> # drop the geometry column
+#     as_tibble() |> # convert to a tibble for easier manipulation
+#     head(100)
 
 # set pH and log SOC variogram parameters
 pH_cn <- 0.198 # nugget variance (uncorrelated)
@@ -336,7 +343,7 @@ stopCluster(cl)
 write_csv(results, file.path(wd, "data/variogram_outputs/mwi_sample_points_variogram.csv"), overwrite = TRUE)
 
 ```
-
+:::
 # Variogram visualisation
 ## Variogram summaries
 I kept the Enumeration areas, District and Point ID columns from the original point shapefile. This is to enable us to group the pairwise points by EA and District. i.e. when p1_District == p2_District, then the pairwise points are in the same district. The [src\R\01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R) performs the summaries.
@@ -344,6 +351,8 @@ I kept the Enumeration areas, District and Point ID columns from the original po
 
 ### Variogram calculations
 
+:::{.callout-note collapse="true"}
+## Variogram summary statistics script
 ```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,collapse=TRUE}
 # Read in the results from the variogram calculations from the csv file in data\variogram_outputs\mwi_sample_points_variogram.csv
 results <- read_csv(file.path(wd, "/data/variogram_outputs/mwi_sample_points_variogram.csv"))
@@ -388,7 +397,38 @@ EA_summary <- results |>
 
 ```
 
+:::
 
+### Data cleaning
+
+There are duplicates in the data that are caused by reverse pairwise calculations i.e. A-B and B-A. We will remove these duplicates and keep the first occurence of the pair. 
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
+# Show duplicates in results
+#| Results with duplicates
+results_import |>
+    mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |>
+    # distinct(row_id_1, row_id_2, .keep_all = TRUE) |> 
+    arrange(row_id_1, row_id_2)|>
+    head(100) |>
+    datatable(options = list(autoWidth = TRUE))
+
+
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
+#| caption="Results without duplicates"
+results_import |>
+    mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |>
+    distinct(row_id_1, row_id_2, .keep_all = TRUE) |> 
+    arrange(row_id_1, row_id_2)|>
+    head(100) |>
+    datatable(options = list(autoWidth = TRUE))
+
+
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
 ### National Summary Statistics
 ```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
 national_summary |>
@@ -412,7 +452,21 @@ EA_summary |>
 ```
 
 # Variogram Plots
+## National Variogram Plots
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
+#| caption="National Variogram Plots"
+pH_semivariogram
+log_SOC_semivariogram
 
+```
+
+## District Variogram Plots
+```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
+#| caption="District Variogram Plots"
+pH_Dist_semivariogram
+log_SOC_Dist_semivariogram
+
+```
 
 
 
