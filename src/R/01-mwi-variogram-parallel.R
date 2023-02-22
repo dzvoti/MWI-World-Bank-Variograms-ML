@@ -4,6 +4,7 @@ library(geosphere) # for calculating distances
 library(sf) # for reading in and writting shapefiles
 library(here) # for working directory management
 library(tidyverse) # for data wrangling
+library(DT) # for interactive tables
 
 # start timer to measure the time it takes to run the script
 start_time <- Sys.time()
@@ -131,17 +132,30 @@ results <- foreach(i = 1:nrow(sample_points), .combine = rbind) %dopar% {
 # stop the cluster and deregister the parallel backend
 stopCluster(cl)
 
-# # read all the partial CSV files and combine them into a single dataframe
-# partial_results <- list.files(path = file.path(wd, "data/variogram_outputs/tmp"), pattern = "mwi_sample_points_variogram_partial", full.names = TRUE)
 
-
-# results <- dplyr::bind_rows(lapply(partial_results, read_csv))
-
-# write the results to a csv file. Replace file if it already exists.
-write_csv(results, file.path(wd, "data/variogram_outputs/mwi_sample_points_variogram.csv"))
 
 # stop the timer
 end_time <- Sys.time()
 
+# store the total run time
+run_time <- end_time - start_time
+
+# Import the summary statistics for the national, district and EA level variograms
+source("02-Variogram-Statistics.R")
+
+
+## Export the summary statistics files to a csv file
+write_csv(combined_national_summary_stats, paste0(wd, "/data/variogram_outputs/mwi_national_variogram_summary_stats_", format(end_time, "%Y-%m-%d-%H-%M-%S"), ".csv"), progress = show_progress())
+
+## Export the district summary statistics to a csv file
+write_csv(district_summary, paste0(wd, "/data/variogram_outputs/mwi_district_variogram_summary_stats_", format(end_time, "%Y-%m-%d-%H-%M-%S"), ".csv"), progress = show_progress())
+
+## Export the EA summary statistics to a csv file
+write_csv(EA_summary, paste0(wd, "/data/variogram_outputs/mwi_EA_variogram_summary_stats_", format(end_time, "%Y-%m-%d-%H-%M-%S"), ".csv"), progress = show_progress())
+
+# write the results to a csv file. Replace file if it already exists.
+write_csv(results, paste0(wd, "/data/variogram_outputs/mwi_raw_sample_points_variograms_", format(end_time, "%Y-%m-%d-%H-%M-%S"), ".csv"), progress = show_progress())
+
+
 # Print where the results are stored
-cat(paste0("The script took ", round((end_time - start_time), 2), " minutes to run and process ", nrow(sample_points), " points and the results are stored in: \n", file.path(wd, "data/variogram_outputs/mwi_sample_points_variogram.csv")))
+cat(paste0("The script took ", round((run_time), 2), " ", attr(run_time, "units"), " to run and process ", nrow(sample_points), " points and the results are stored in: \n", file.path(wd, "data/variogram_outputs/mwi_sample_points_variogram.csv")))

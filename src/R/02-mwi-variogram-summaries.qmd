@@ -1,5 +1,8 @@
 ---
 title: "Soil pH and Soil Organic Carbon Variogram Calculations for Malawi"
+author: "Liberty Mlambo"
+date: now
+date-format: full
 format:
   html:
     toc: true
@@ -17,6 +20,19 @@ format:
 # Introduction
 This report summaries the results of the variogram calculations for Soil pH  and soil organic carbon in Malawi.
 
+##  Summary of changes
+|Date | Description |
+|-----|-------------|
+| 21-02-2023 | Initial version |
+| 22-02-2023 | Changed the masking areas in the python points generator to mask: Lake Malawi, Lake Chilwa and  Lake Malombe |
+| 22-02-2023 | Used `if (i < j)` control in the varigram calculations loop to avoid repeat A-B vs B-A calculations. |
+| 22-02-2023 | Added within district and within ea global means. I exported the results of summary statistics to separate csv's in [/data/variogram_outputs/](/data/variogram_outputs/) and append dates to the file name to indicate the time of processing. e.g. National summary stats are in [data/variogram_outputs/mwi_national_variogram_summary_stats_2023-02-22-16-37-39.csv](data/variogram_outputs/mwi_national_variogram_summary_stats_2023-02-22-16-37-39.csv) |
+| 22-02-2023 | Added a new section to the report to show the summary statistics for the variogram calculations. |
+
+: Changelog {tbl-colwidths="[20,80]"}
+
+
+
 ## Directory structure
  |File | Description |
  |-----|-------------|
@@ -25,7 +41,7 @@ This report summaries the results of the variogram calculations for Soil pH  and
  | [01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R)| R script to calculate the variograms|
  |Inputs|  |
  |[ECHO2_prioritization.shp](data\admin_inputs\mwi_eas_acho\echo2_prioritization\ECHO2_prioritization.shp) | Shapefile of enumeration areas in Malawi|
- | [lake_malawi.shp](data\admin_inputs\mwi_eas_acho\lake_malawi.shp) | Shapefile of Lake Malawi|
+ | [mwi_lakes.shp](data\admin_inputs\mwi_eas_acho\mwi_lakes.shp) | Shapefile of Lake Malawi|
  |Outputs|
  |[mwi_sample_points_variogram.csv](data\variogram_outputs\mwi_sample_points_variogram.csv) | CSV file with the results of the variogram calculations|
  | [data\point_outputs\mwi_sample_points.shp](data\point_outputs\mwi_sample_points.shp) | Shapefile of the sample points generated in QGIS|
@@ -38,20 +54,20 @@ This report summaries the results of the variogram calculations for Soil pH  and
 # set working directory to the root of the project
 wd <- here::here()
 # load required libraries
-library(geosphere)  # For distance calculations
-library(sf)         # For spatial data
-library(here)       # For dynamic file paths
-library(tidyverse)  # For data wrangling
-library(knitr)      # For table formatting
-library(kableExtra) # For table formatting
-library(leaflet)    # For interactive maps
-library(DT)         # For interactive tables
+library(geosphere) # For distance calculations
+library(sf) # For spatial data
+library(here) # For dynamic file paths
+library(tidyverse) # For data wrangling
+library(leaflet) # For interactive maps
+library(DT) # For interactive tables
 ```
 
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE,eval=TRUE}
 source(file.path(wd, "src/R/02-Variogram-Statistics.R"))
 ```
+
+
 
 ## Sample point generation
 
@@ -90,8 +106,8 @@ if not os.path.exists(polygon_file):
     print('The input polygon file does not exist')
     
 
-# Set waterbodies or other area to mask file
-waterbodies_file = wd + r'\data\admin_inputs\mwi_eas_acho\lake_malawi.shp'
+# Set waterbodies or other area to mask file. 
+waterbodies_file = wd + r'\data\admin_inputs\mwi_eas_acho\mwi_lakes.shp'
 
 # Check if the waterbodies file exists if not exit the script with an error message
 if not os.path.exists(waterbodies_file):
@@ -174,7 +190,6 @@ print('Script completed. Output file saved to:' + wd + output_file)
 
 # Load the output layer to QGIS
 iface.addVectorLayer(output_file, "mwi_sample_points", "ogr")
-
 ```
 
 :::
@@ -187,7 +202,7 @@ iface.addVectorLayer(output_file, "mwi_sample_points", "ogr")
 
 malawi <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/echo2_prioritization/ECHO2_prioritization.shp"), quiet = TRUE)
 
-lake_Malawi <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/lake_malawi.shp"),quiet=TRUE)
+mwi_lakes <- st_read(file.path(wd, "/data/admin_inputs/mwi_eas_acho/mwi_lakes.shp"), quiet = TRUE)
 
 sample_points_shp <- st_read(file.path(wd, "/data/point_outputs/mwi_sample_points.shp"), quiet = TRUE)
 ```
@@ -198,7 +213,7 @@ sample_points_shp <- st_read(file.path(wd, "/data/point_outputs/mwi_sample_point
 leaflet() %>%
     addProviderTiles(providers$CartoDB.Positron) %>%
     addPolygons(data = malawi, color = "black", weight = 1, fillOpacity = 0) %>%
-    addPolygons(data = lake_Malawi, color = "blue", weight = 1, fillOpacity = 0) %>%
+    addPolygons(data = mwi_lakes, color = "blue", weight = 1, fillOpacity = 0) %>%
     addCircleMarkers(data = sample_points_shp, radius = 0.5, color = "black", fillOpacity = 0.5)
 ```
 
@@ -218,7 +233,7 @@ I modified the variogam function from your script to calculate the variogram for
 
 :::{.callout-note collapse="true"}
 ## Variogram calculations script
-```{r echo=TRUE, message=FALSE, warning=FALSE,collapse=TRUE,eval=FALSE}
+
 ```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,collapse=TRUE}
 library(foreach) # for parallel processing
 library(doParallel) # for parallel processing
@@ -226,18 +241,28 @@ library(geosphere) # for calculating distances
 library(sf) # for reading in and writting shapefiles
 library(here) # for working directory management
 library(tidyverse) # for data wrangling
+library(DT) # for interactive tables
+
+# start timer to measure the time it takes to run the script
+start_time <- Sys.time()
 
 # set working directory to the root of the project. Everything else is relative to this.
 wd <- here()
 
+# Delete temorary files in "data/variogram_outputs/tmp" if they exist
+if (length(list.files(path = file.path(wd, "data/variogram_outputs/tmp"), pattern = "mwi_sample_points_variogram_partial", full.names = TRUE)) > 0) {
+    file.remove(list.files(path = file.path(wd, "data/variogram_outputs/tmp"), pattern = "mwi_sample_points_variogram_partial", full.names = TRUE))
+}
+
+
 # read in the sample points shapefile.
 sample_points <- st_read(file.path(wd, "data/point_outputs/mwi_sample_points.shp"))
 
-# subset the sample points to the first 100 points for testing
-# sample_points <- sample_points |>
-#     st_drop_geometry() |> # drop the geometry column
-#     as_tibble() |> # convert to a tibble for easier manipulation
-#     head(100)
+# # subset the sample points to the first 100 points for testing
+sample_points <- sample_points |>
+    st_drop_geometry() |> # drop the geometry column
+    as_tibble() # convert to a tibble for easier manipulation
+# head(10)
 
 # set pH and log SOC variogram parameters
 pH_cn <- 0.198 # nugget variance (uncorrelated)
@@ -297,14 +322,14 @@ cl <- makeCluster(7)
 # register the cluster for parallel processing
 registerDoParallel(cl)
 
+
+
 # loop through the sample points and calculate the pairwise variograms in parallel
 results <- foreach(i = 1:nrow(sample_points), .combine = rbind) %dopar% {
     result_list <- list()
     for (j in 1:nrow(sample_points)) {
         # skip the computation if the two locations are the same
-        if (i == j) {
-            next
-        } else {
+        if (i < j) {
             # calculate the distance between the two locations in km using the Vincenty ellipsoid method
             loc1 <- c(sample_points$xcoord[i], sample_points$ycoord[i])
             loc2 <- c(sample_points$xcoord[j], sample_points$ycoord[j])
@@ -329,6 +354,11 @@ results <- foreach(i = 1:nrow(sample_points), .combine = rbind) %dopar% {
             )
             # append the result to the results dataframe
             result_list[[j]] <- result
+            # # write the results to a CSV file after each iteration
+            # readr::write_csv(do.call(rbind, result_list), paste0(wd, "/data/variogram_outputs/tmp/mwi_sample_points_variogram_partial_", i, ".csv"))
+
+            # # write the results to a CSV file after each iteration and append to the existing file
+            # readr::write_csv(do.call(rbind, result_list), paste0(wd, "/data/variogram_outputs/tmp/mwi_sample_points_variogram_merged.csv"), append = TRUE)
         }
     }
     # print a message to the console to show progress
@@ -339,61 +369,34 @@ results <- foreach(i = 1:nrow(sample_points), .combine = rbind) %dopar% {
 # stop the cluster and deregister the parallel backend
 stopCluster(cl)
 
+
+
+# stop the timer
+end_time <- Sys.time()
+
+# store the total run time
+run_time <- end_time - start_time
+
+# Import the summary statistics for the national, district and EA level variograms
+source("02-Variogram-Statistics.R")
+
+
+## Export the summary statistics files to a csv file
+write_csv(combined_national_summary_stats, paste0(wd, "/data/variogram_outputs/mwi_national_variogram_summary_stats_", format(end_time, "%Y-%m-%d-%H-%M-%S"), ".csv"), progress = show_progress())
+
+## Export the district summary statistics to a csv file
+write_csv(district_summary, paste0(wd, "/data/variogram_outputs/mwi_district_variogram_summary_stats_", format(end_time, "%Y-%m-%d-%H-%M-%S"), ".csv"), progress = show_progress())
+
+## Export the EA summary statistics to a csv file
+write_csv(EA_summary, paste0(wd, "/data/variogram_outputs/mwi_EA_variogram_summary_stats_", format(end_time, "%Y-%m-%d-%H-%M-%S"), ".csv"), progress = show_progress())
+
 # write the results to a csv file. Replace file if it already exists.
-write_csv(results, file.path(wd, "data/variogram_outputs/mwi_sample_points_variogram.csv"), overwrite = TRUE)
-
-```
-:::
-# Variogram visualisation
-## Variogram summaries
-I kept the Enumeration areas, District and Point ID columns from the original point shapefile. This is to enable us to group the pairwise points by EA and District. i.e. when p1_District == p2_District, then the pairwise points are in the same district. The [src\R\01-mwi-variogram-parallel.R](src\R\01-mwi-variogram-parallel.R) performs the summaries.
+write_csv(results, paste0(wd, "/data/variogram_outputs/mwi_raw_sample_points_variograms_", format(end_time, "%Y-%m-%d-%H-%M-%S"), ".csv"), progress = show_progress())
 
 
-### Variogram calculations
+# Print where the results are stored
+cat(paste0("The script took ", round((run_time), 2), " ", attr(run_time, "units"), " to run and process ", nrow(sample_points), " points and the results are stored in: \n", file.path(wd, "data/variogram_outputs/mwi_sample_points_variogram.csv")))
 
-:::{.callout-note collapse="true"}
-## Variogram summary statistics script
-```{r echo=TRUE, message=FALSE, warning=FALSE,eval=FALSE,collapse=TRUE}
-# Read in the results from the variogram calculations from the csv file in data\variogram_outputs\mwi_sample_points_variogram.csv
-results <- read_csv(file.path(wd, "/data/variogram_outputs/mwi_sample_points_variogram.csv"))
-
-## Overall summary statistics
-national_summary <- results |>
-    summarize(
-        ph_n = n(),
-        ph_variogram_mean = mean(ph_variogram),
-        ph_vario_sd = sd(ph_variogram),
-        log_SOC_n = n(),
-        log_SOC_variogram_mean = mean(log_SOC_variogram),
-        log_SOC_vario_sd = sd(log_SOC_variogram)
-    )
-
-
-## District summary statistics
-district_summary <- results |>
-    filter(p1_District == p2_District) %>%
-    group_by(p1_District) %>%
-    summarize(
-        ph_n = n(),
-        ph_variogram_mean = mean(ph_variogram),
-        ph_vario_sd = sd(ph_variogram),
-        log_SOC_n = n(),
-        log_SOC_variogram_mean = mean(log_SOC_variogram),
-        log_SOC_vario_sd = sd(log_SOC_variogram)
-    )
-
-## EA summary statistics
-EA_summary <- results |>
-    filter(p1_EACODE == p2_EACODE) %>%
-    group_by(p1_EACODE) %>%
-    summarize(
-        ph_n = n(),
-        ph_variogram_mean = mean(ph_variogram),
-        ph_vario_sd = sd(ph_variogram),
-        log_SOC_n = n(),
-        log_SOC_variogram_mean = mean(log_SOC_variogram),
-        log_SOC_vario_sd = sd(log_SOC_variogram)
-    )
 
 ```
 
@@ -401,37 +404,25 @@ EA_summary <- results |>
 
 ### Data cleaning
 
-There are duplicates in the data that are caused by reverse pairwise calculations i.e. A-B and B-A. We will remove these duplicates and keep the first occurence of the pair. 
+:::{.callout-note collapse="true"}
+## Data duplicates solved
+The duplicates in the data have been resolved. 
 ```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
 # Show duplicates in results
 #| Results with duplicates
-results_import |>
+results |>
     mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |>
-    # distinct(row_id_1, row_id_2, .keep_all = TRUE) |> 
-    arrange(row_id_1, row_id_2)|>
-    head(100) |>
+    arrange(row_id_1, row_id_2) |>
+    head(20) |>
     datatable(options = list(autoWidth = TRUE))
-
-
 ```
+:::
 
 
-```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
-#| caption="Results without duplicates"
-results_import |>
-    mutate(row_id_1 = pmax(p1_id, p2_id), row_id_2 = pmin(p1_id, p2_id)) |>
-    distinct(row_id_1, row_id_2, .keep_all = TRUE) |> 
-    arrange(row_id_1, row_id_2)|>
-    head(100) |>
-    datatable(options = list(autoWidth = TRUE))
-
-
-```
+## National Summary Statistics
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
-### National Summary Statistics
-```{r echo=TRUE, message=FALSE, warning=FALSE,eval=TRUE,collapse=TRUE}
-national_summary |>
+combined_national_summary_stats |>
     datatable(options = list(autoWidth = TRUE))
 
 ```
@@ -467,6 +458,7 @@ pH_Dist_semivariogram
 log_SOC_Dist_semivariogram
 
 ```
+
 
 
 
