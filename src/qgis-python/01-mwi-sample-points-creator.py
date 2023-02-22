@@ -29,7 +29,7 @@ if not os.path.exists(polygon_file):
     
 
 # Set waterbodies or other area to mask file
-waterbodies_file = wd + r'\data\admin_inputs\mwi_eas_acho\lake_malawi.shp'
+waterbodies_file = wd + r'\data\admin_inputs\mwi_eas_acho\mwi_lakes.shp'
 
 # Check if the waterbodies file exists if not exit the script with an error message
 if not os.path.exists(waterbodies_file):
@@ -37,7 +37,7 @@ if not os.path.exists(waterbodies_file):
     
 
 # Set number of points to generate
-N = 1000
+N = 10000
 
 # Load the polygon layer
 polygon_layer = QgsVectorLayer(polygon_file, "polygon", "ogr")
