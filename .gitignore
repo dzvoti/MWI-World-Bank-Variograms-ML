@@ -48,3 +48,4 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 data/variogram_outputs/old/*
+data/variogram_outputs/mwi_raw_sample_points_variograms_2023-02-22-16-37-39.csv
